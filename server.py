@@ -115,14 +115,6 @@ class Server:
 
 
     def init_model(self):
-        # self.glob_model = models.__dict__[self.model_name](num_classes=self.num_classes)
-
-        # if self.args.gpu is not None:
-        #     torch.cuda.set_device(self.args.gpu)
-        #     self.glob_model = self.glob_model.cuda(self.args.gpu)
-        # else:
-        #     # DataParallel will divide and allocate batch_size to all available GPUs
-        #     self.glob_model = torch.nn.DataParallel(self.glob_model).cuda()
         self.glob_model = CuedSpeechTransformer(
             dataset = 'Chinese',
             d_src_seq=self.cfg["d_word_vec"],
@@ -145,11 +137,6 @@ class Server:
             half_step_residual=self.cfg["half_step_residual"],
            )
 
-        # self.glob_ling_model = LingLSTM(n_trg_vocab = self.cfg["n_trg_vocab"], 
-        #                                 d_words= self.cfg["d_word_vec"], 
-        #                                 hidden_size= self.cfg["hidden_size"], 
-        #                                 num_layers=self.cfg["num_layer"])
-
         self.glob_ling_model = Seq2Seq(n_trg_vocab = self.cfg["n_trg_vocab"], 
                                         d_words= self.cfg["d_word_vec"], 
                                         hidden_size= self.cfg["hidden_size"], 
@@ -158,16 +145,6 @@ class Server:
         self.device = torch.device('cuda:0' if self.cfg['cuda'] else 'cpu')
         if self.recover:
             self.load_model()
-
-
-        # if self.cfg["multi_gpus"] is False and self.cfg['cuda']:
-        #     self.glob_model.to(device)
-        # elif self.cfg["multi_gpus"] is True and self.cfg['cuda']:
-        #     torch.nn.DataParallel(self.glob_model).cuda()
-        # else:
-        #     print("using cpu for training!")
-        #     self.glob_model=self.glob_model.to(device)
-
   
     def init_client(self):
         self.clients = []
@@ -270,21 +247,14 @@ class Server:
     def init_loss_fn(self):
         self.loss_CTC = FCTCLoss(blank=self.cfg['blank'], zero_infinity=False)
         self.nllloss=nn.NLLLoss()
-        # self.ensemble_loss=nn.KLDivLoss(log_target=True, reduction='batchmean')
         self.ensemble_loss=nn.MSELoss(reduction='mean')
-
-        # self.cosine_loss=nn.CosineEmbeddingLoss(reduction='mean')
-
-        # self.ce_loss = nn.CrossEntropyLoss()
-        # self.diversity_loss = DiversityLoss(metric='l1')
-
 
     def save_results(self, result):
         self.log.write(result + '\n')
         self.log.flush()
 
     def train_ling_model(self):
-        print('Training semantic model...')
+        print('Training linguistic model...')
         glob_model_head = copy.deepcopy(self.glob_model.head)
         glob_model_head.sub_rate = 1 # decode does not subsample
         glob_model_head.to(self.device)
@@ -324,11 +294,9 @@ class Server:
                 #CEloss 
                 gt = seq.reshape(-1)
                 loss_NLL = self.nllloss(output, gt)
-
-                loss = loss_NLL + self.cfg['alpha'] * loss_sim #TODO: add parameter
-                # print('lossnnl:', loss_NLL, 'losssim:', loss_sim)
+                loss = loss_NLL + self.cfg['alpha'] * loss_sim
                 loss.backward()
-                # loss_NLL.backward()
+
                 self.optimizer.step()
 
                 # acc
@@ -363,11 +331,8 @@ class Server:
             # training local models
 
             self.selected_clients, self.client_idxs = self.select_clients(self.frac_clients, return_idx=True)
-            
             self.send_parameters()# broadcast averaged prediction model
-
             chosen_verbose_user = np.random.randint(0, len(self.clients))
-
             self.timestamp = time.time() # log user-training start time
 
             for idx, (client_id, client) in enumerate(zip(self.client_idxs, self.selected_clients)): # allow selected clients to train
@@ -386,32 +351,15 @@ class Server:
             self.aggregate_parameters()
             curr_timestamp=time.time()  # log  server-agg end time
             agg_time = curr_timestamp - self.timestamp
- 
-            # self.save_model()
-
-            # self.timestamp = time.time() # log server-generator start time
-            # self.train_generator(self.gen_batchsize, epoches=self.gen_epoches // self.n_teacher_iters, verbose=True)
-            # curr_timestamp=time.time()  # log  server-agg end time
-            # gen_time = curr_timestamp - self.timestamp
-
-            # if glob_iter  > 0 and glob_iter % 20 == 0 and self.latent_layer_idx == 0:
-            #     self.visualize_images(self.generative_model, glob_iter, repeats=10)
            
             valCER = self.evaluate()
             if valCER <= best_cer:
                 self.save_model()
                 best_cer = valCER
 
-            # training semantic model
+            # training linguistic model
             self.train_ling_model()
             
-            
-            
-            
-        # self.save_results(result)
-
-        # if best_acc > glob_acc:
-        #     self.save_model()
 
 
     def evaluate(self):
@@ -424,70 +372,6 @@ class Server:
         print(output)
 
         return validationCER
-
-        # self.glob_model.eval()
-        # batch_time = AverageMeter('Time', ':6.3f')
-        # losses = AverageMeter('Loss', ':.4e')
-        # top1 = AverageMeter('Acc@1', ':6.2f')
-        # top5 = AverageMeter('Acc@5', ':6.2f')
-        
-        # # switch to evaluate mode
-        # all_preds = []
-        # all_targets = []
-        # with torch.no_grad():
-        #     end = time.time()
-        #     for i, (input, target) in enumerate(self.eval_loader):
-        #         if self.args.gpu is not None:
-        #             input = input.cuda(self.args.gpu, non_blocking=True)
-        #         target = target.cuda(self.args.gpu, non_blocking=True)
-
-        #         # compute output
-        #         output = self.glob_model(input)
-        #         loss = self.ce_loss(output, target)
-
-        #         # measure accuracy and record loss
-        #         acc1, acc5 = accuracy(output, target, topk=(1, 5))
-        #         losses.update(loss.item(), input.size(0))
-        #         top1.update(acc1[0], input.size(0))
-        #         top5.update(acc5[0], input.size(0))
-
-        #         # measure elapsed time
-        #         batch_time.update(time.time() - end)
-        #         end = time.time()
-
-        #         _, pred = torch.max(output, 1)
-        #         all_preds.extend(pred.cpu().numpy())
-        #         all_targets.extend(target.cpu().numpy())
-
-               
-        #         output = ('Test: [{0}/{1}]\t'
-        #                 'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #                 'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-        #                 'Prec@1 {top1.val:.3f} ({top1.avg:.3f})\t'
-        #                 'Prec@5 {top5.val:.3f} ({top5.avg:.3f})'.format(
-        #             i, len(self.eval_loader), batch_time=batch_time, loss=losses,
-        #             top1=top1, top5=top5))
-        #     print(output)
-        #     cf = confusion_matrix(all_targets, all_preds).astype(float)
-        #     cls_cnt = cf.sum(axis=1)
-        #     cls_hit = np.diag(cf)
-        #     cls_acc = cls_hit / cls_cnt
-        #     output = ('Eval Results: Prec@1 {top1.avg:.3f} Prec@5 {top5.avg:.3f} Loss {loss.avg:.5f}'
-        #             .format(top1=top1, top5=top5, loss=losses))
-        #     out_cls_acc = 'Eval Class Accuracy: %s'%((np.array2string(cls_acc, separator=',', formatter={'float_kind':lambda x: "%.3f" % x})))
-        #     print(output)
-        #     print(out_cls_acc)
-        #     # if log is not None:
-        #     #     log.write(output + '\n')
-        #     #     log.write(out_cls_acc + '\n')
-        #     #     log.flush()
-
-        #     # tf_writer.add_scalar('loss/test_'+ flag, losses.avg, epoch)
-        #     # tf_writer.add_scalar('acc/test_' + flag + '_top1', top1.avg, epoch)
-        #     # tf_writer.add_scalar('acc/test_' + flag + '_top5', top5.avg, epoch)
-        #     # tf_writer.add_scalars('acc/test_' + flag + '_cls_acc', {str(i):x for i, x in enumerate(cls_acc)}, epoch)
-
-        # return top1.avg, losses.avg
 
 
 
