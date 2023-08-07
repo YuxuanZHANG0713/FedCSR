@@ -59,22 +59,15 @@ chi_args["conv_kernel_size"] = 31
 chi_args["conv_dropout"] = 0.4
 chi_args["half_step_residual"] = True
 
-# dropout=0.4 for single
-
 # semantic model architecture
 chi_args["hidden_size"] = 512
 chi_args["num_layer"] = 2
 
 # semantic model training
-chi_args["sem_lr"] = 1e-4 #1e-6 for Adam 1e-5 for SDG
+chi_args["sem_lr"] = 1e-4
 chi_args["alpha"] = 0.005
 chi_args["beta"] = 0.005
 chi_args["gamma"] = 0.5
-
-# chi_args["alpha"] = 0 # for fedavg
-# chi_args["beta"] = 0
-# chi_args["gamma"] = 0
-
 
 # federated training
 chi_args["glob_iters"] = 50 # number of global iterations
