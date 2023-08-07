@@ -66,37 +66,12 @@ class Client:
 
     def set_parameters(self, state_dict_model, state_dict_ling, beta=1):
 
-        # model_state = self.model.state_dict()
-       
-        # if beta==1:
-        #     for key in state_dict.keys():
-        #         model_state[key] = state_dict[key]
-        #         self.local_model[key] = state_dict[key]
-        # else:
-        #     for key in state_dict.keys():
-        #         model_state[key] = model_state[key]*(1-beta) + state_dict[key]*beta
-        #         self.local_model[key] = self.local_model[key]*(1-beta) + state_dict[key]*beta
-
         self.model.load_state_dict(state_dict_model)
         self.ling_model.load_state_dict(state_dict_ling)
         
         self.local_model = copy.deepcopy(self.model.state_dict())
-
-        # for para in self.optimizer.param_groups:#看传递给优化器的模型参数的值和地址是不是内存共享的
-            
-        #     print(id(para['params'][0]))
-        #     break
-                
-    
-        # for key, value in self.model.named_parameters():#直接在模型中查看模型的参数的内存地址和值
-            
-        #     print(id(value))
-        #     break
-
    
     def local_train(self, client_id, glob_iter, early_stop, verbose, regularization):
-        # self.model.train()
-        # self.glob_gen.eval()
         device = torch.device('cuda:0' if self.cfg['cuda'] else 'cpu')
 
         scaler = GradScaler()
@@ -113,7 +88,6 @@ class Client:
 
 
     def evaluate(self, eval_loader):
-        # self.model.eval()
         device = torch.device('cuda:0' if self.cfg['cuda'] else 'cpu')
         validationLoss, validationCER, validationWER, predictions, targets = evaluate(self.model, eval_loader, self.loss_CTC, device, return_result=True, args=self.cfg)
         output = ("Val.Loss: %.6f ||Val.CER: %.3f ||Val.WER: %.3f"
